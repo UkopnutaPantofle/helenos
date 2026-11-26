@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015 Petr Pavlu
+ * Copyright (c) 2026 Jakub Kodym
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -287,6 +288,16 @@ void exception_init(void)
 
 	VBAR_EL1_write(((uint64_t) &exc_vector));
 }
+
+#ifdef CONFIG_SMP
+
+/** Initializes exception handling for application processors. */
+void exception_ap_init(void)
+{
+	VBAR_EL1_write(((uint64_t) &exc_vector));
+}
+
+#endif
 
 /** Print #istate_t structure content.
  *

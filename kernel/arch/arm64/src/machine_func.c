@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2016 Petr Pavlu
+ * Copyright (c) 2026 Jakub Kodym
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -39,6 +40,7 @@
 #include <arch/mach/hikey960/hikey960.h>
 #include <arch/mach/quartz64a/quartz64a.h>
 #include <arch/mach/virt/virt.h>
+#include <assert.h>
 
 /** Pointer to machine_ops structure being used. */
 static struct arm_machine_ops *machine_ops;
@@ -54,6 +56,12 @@ void machine_ops_init(void)
 	machine_ops = &quartz64a_machine_ops;
 #else
 #error Machine type not defined.
+#endif
+
+#ifdef CONFIG_SMP
+	if (machine_ops->smp_ops == NULL) {
+		panic("SMP is enabled, but machine does not provide SMP operations.");
+	}
 #endif
 }
 
@@ -109,6 +117,52 @@ void machine_early_uart_output(char32_t c)
 	if (machine_ops->machine_early_uart_output != NULL)
 		machine_ops->machine_early_uart_output(c);
 }
+
+#ifdef CONFIG_SMP
+/** Get the list of PE affinities. */
+affinity_t *machine_get_pe_affinities(void)
+{
+	return machine_ops->smp_ops->machine_get_pe_affinities();
+}
+
+/** Get the number of PEs. */
+unsigned int machine_get_pe_count(void)
+{
+	return machine_ops->smp_ops->machine_get_pe_count();
+}
+
+/** Perform machine-specific application processor initialization. */
+void machine_ap_init(void)
+{
+	machine_ops->smp_ops->machine_ap_init();
+}
+
+/** Enable virtual timer interrupt on an application processor. */
+inr_t machine_ap_enable_vtimer_irq(void)
+{
+	return machine_ops->smp_ops->machine_ap_enable_vtimer_irq();
+}
+
+/** Enable an IPI interrupt on a PE. */
+void machine_pe_enable_ipi_irq(int ipi_id)
+{
+	machine_ops->smp_ops->machine_pe_enable_ipi_irq(ipi_id);
+}
+
+/**
+ * Send IPI to all cores other than the sender.
+ *
+ * On some interrupt controllers there can be only one IPI per ID pending at
+ * a time, so the caller is responsible for ensuring that the previous IPI with
+ * the same ID is complete before sending another one, or that missing the IPI
+ * is acceptable.
+ */
+void machine_send_ipi_all(int ipi)
+{
+	machine_ops->smp_ops->machine_send_ipi_all(ipi);
+}
+
+#endif /* CONFIG_SMP */
 
 /** @}
  */

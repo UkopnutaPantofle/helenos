@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015 Petr Pavlu
+ * Copyright (c) 2026 Jakub Kodym
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -105,15 +106,20 @@ static void timer_suspend(void)
 	CNTV_CTL_EL0_write(cntv_ctl | CNTV_CTL_IMASK_FLAG);
 }
 
-/** Start the virtual timer. */
-static void timer_start(void)
+/** Initialize the virtual timer. */
+static void timer_init(void)
 {
 	uint64_t cntfrq = CNTFRQ_EL0_read();
-	uint64_t cntvct = CNTVCT_EL0_read();
-	uint64_t cntv_ctl = CNTV_CTL_EL0_read();
 
 	/* Calculate the increment. */
 	timer_increment = cntfrq / HZ;
+}
+
+/** Start the virtual timer. */
+static void timer_start(void)
+{
+	uint64_t cntvct = CNTVCT_EL0_read();
+	uint64_t cntv_ctl = CNTV_CTL_EL0_read();
 
 	/* Program the timer. */
 	CNTV_CVAL_EL0_write(cntvct + timer_increment);
@@ -167,8 +173,21 @@ void interrupt_init(void)
 	timer_irq.handler = timer_irq_handler;
 	irq_register(&timer_irq);
 
+	timer_init();
 	timer_start();
 }
 
+#ifdef CONFIG_SMP
+
+void interrupt_ap_init(void)
+{
+	timer_suspend();
+
+	machine_ap_enable_vtimer_irq();
+
+	timer_start();
+}
+
+#endif
 /** @}
  */

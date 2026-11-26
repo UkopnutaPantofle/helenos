@@ -49,6 +49,14 @@ arch_src += files(
 	'src/start.S',
 )
 
+if CONFIG_SMP
+arch_src += files(
+	'src/smp/arch_ipi.c',
+	'src/smp/psci.c',
+	'src/smp/psci.S',
+)
+endif
+
 if MACHINE == 'virt'
 	arch_src += files('src/mach/virt/virt.c')
 endif

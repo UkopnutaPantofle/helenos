@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015 Petr Pavlu
+ * Copyright (c) 2026 Jakub Kodym
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -34,6 +35,8 @@
 
 #ifdef CONFIG_SMP
 
+#include <arch/interrupt.h>
+#include <arch/smp/arch_ipi.h>
 #include <smp/ipi.h>
 #include <panic.h>
 
@@ -43,7 +46,13 @@
  */
 void ipi_broadcast_arch(int ipi)
 {
-	panic("broadcast IPI not implemented.");
+	switch (ipi) {
+	case VECTOR_TLB_SHOOTDOWN_IPI:
+		ipi_send_tlb_shootdown_all();
+		break;
+	default:
+		panic("Unsupported IPI broadcast number: %" PRId32 "\n", ipi);
+	}
 }
 
 #endif /* CONFIG_SMP */

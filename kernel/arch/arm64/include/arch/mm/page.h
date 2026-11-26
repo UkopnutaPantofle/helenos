@@ -174,6 +174,12 @@ extern uintptr_t physmem_base;
 /** Data access permission. User mode: read only, privileged mode: read only. */
 #define PTE_AP_USER_LIMITED_KERNEL_LIMITED  3
 
+/** Inner shareable. Every agent in the Inner Shareable domain (typically all
+ * other cores and processors) may observe changes in this region. Only valid
+ * for normal memory.
+ */
+#define PTE_L3_INNER_SHAREABLE	0x3
+
 /*
  * Memory types. MAIR_EL1 index 0 is unused, which assures that if a page
  * table entry is non-null then it is valid (PTE_VALID_ARCH() returns true).
@@ -238,6 +244,10 @@ extern uintptr_t physmem_base;
 #define PTE_L2_BLOCK_OUTPUT_ADDRESS_MASK 0x0000FFFFFFE00000
 
 #endif /* __ASSEMBLER__ */
+
+/** Shift to access the shareability bits in a page table block entry. */
+#define PTE_BLOCK_SHAREABILITY_SHIFT	8
+#define PTE_BLOCK_INNER_SHAREABLE	PTE_L3_INNER_SHAREABLE 
 
 /** Shift to access the access bit in a page table entry. */
 #define PTE_ACCESS_SHIFT  10
@@ -367,10 +377,13 @@ _NO_TRACE static inline void set_pt_level3_flags(pte_t *pt, size_t i,
 {
 	pte_t *p = &pt[i];
 
-	if (flags & PAGE_CACHEABLE)
+	if (flags & PAGE_CACHEABLE) {
 		p->attr_index = MAIR_EL1_NORMAL_MEMORY_INDEX;
-	else
+		p->shareability = PTE_L3_INNER_SHAREABLE;
+	} else {
 		p->attr_index = MAIR_EL1_DEVICE_MEMORY_INDEX;
+		/* Device memory is always Outer-shareable */
+	}
 	p->valid = (flags & PAGE_PRESENT) != 0;
 	p->type = PTE_L3_TYPE_PAGE;
 

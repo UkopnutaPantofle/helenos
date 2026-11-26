@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015 Petr Pavlu
+ * Copyright (c) 2026 Jakub Kodym
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -56,6 +57,10 @@ extern void interrupts_restore(ipl_t ipl);
 extern ipl_t interrupts_read(void);
 extern bool interrupts_disabled(void);
 extern void interrupt_init(void);
+
+#ifdef CONFIG_SMP
+extern void interrupt_ap_init(void);
+#endif /* CONFIG_SMP */
 
 #endif
 

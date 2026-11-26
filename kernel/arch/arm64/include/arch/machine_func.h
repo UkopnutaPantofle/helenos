@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2016 Petr Pavlu
+ * Copyright (c) 2026 Jakub Kodym
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +41,11 @@
 
 #include <arch/istate.h>
 #include <typedefs.h>
+#ifdef CONFIG_SMP
+#include <arch/smp/aff.h>
+
+struct arm_smp_machine_ops;
+#endif /* CONFIG_SMP */
 
 struct arm_machine_ops {
 	void (*machine_init)(void);
@@ -50,7 +56,21 @@ struct arm_machine_ops {
 	size_t (*machine_get_irq_count)(void);
 	const char *(*machine_get_platform_name)(void);
 	void (*machine_early_uart_output)(char32_t);
+#ifdef CONFIG_SMP
+	struct arm_smp_machine_ops *smp_ops;
+#endif /* CONFIG_SMP */
 };
+
+#ifdef CONFIG_SMP
+struct arm_smp_machine_ops {
+	affinity_t *(*machine_get_pe_affinities)(void);
+	unsigned int (*machine_get_pe_count)(void);
+	void (*machine_ap_init)(void);
+	inr_t (*machine_ap_enable_vtimer_irq)(void);
+	void (*machine_pe_enable_ipi_irq)(int);
+	void (*machine_send_ipi_all)(int);
+};
+#endif /* CONFIG_SMP */
 
 extern void machine_ops_init(void);
 extern void machine_init(void);
@@ -61,6 +81,15 @@ extern inr_t machine_enable_vtimer_irq(void);
 extern size_t machine_get_irq_count(void);
 extern const char *machine_get_platform_name(void);
 extern void machine_early_uart_output(char32_t);
+
+#ifdef CONFIG_SMP
+extern affinity_t *machine_get_pe_affinities(void);
+extern unsigned int machine_get_pe_count(void);
+extern void machine_ap_init(void);
+extern inr_t machine_ap_enable_vtimer_irq(void);
+extern void machine_pe_enable_ipi_irq(int);
+extern void machine_send_ipi_all(int);
+#endif /* CONFIG_SMP */
 
 #endif
 

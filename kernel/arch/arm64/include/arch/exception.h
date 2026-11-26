@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2016 Petr Pavlu
- *
+ * Copyright (c) 2026 Jakub Kodym
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -90,6 +90,10 @@
 
 #ifndef __ASSEMBLER__
 extern void exception_init(void);
+
+#ifdef CONFIG_SMP
+extern void exception_ap_init(void);
+#endif /* CONFIG_SMP */
 #endif /* __ASSEMBLER__ */
 
 #endif

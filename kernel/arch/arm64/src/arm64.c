@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015 Petr Pavlu
+ * Copyright (c) 2026 Jakub Kodym
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,6 +46,7 @@
 #include <syscall/syscall.h>
 #include <sysinfo/sysinfo.h>
 #include <userspace.h>
+#include <arch/smp/arch_ipi.h>
 
 static void arm64_post_mm_init(void);
 static void arm64_post_smp_init(void);
@@ -89,8 +91,20 @@ void arm64_pre_main(void *entry __attribute__((unused)), bootinfo_t *bootinfo)
  */
 void arm64_post_mm_init(void)
 {
-	if (config.cpu_active != 1)
+	if (config.cpu_active != 1) {
+#ifdef CONFIG_SMP
+		/* Perform initialization for application processors. */
+
+		machine_ap_init();
+
+		exception_ap_init();
+		interrupt_ap_init();
+
+		/* Initialize IPI. */
+		ipi_pe_init();
+#endif
 		return;
+	}
 
 	/* Do machine-specific initialization. */
 	machine_init();
@@ -98,6 +112,12 @@ void arm64_post_mm_init(void)
 	/* Initialize exception dispatch table. */
 	exception_init();
 	interrupt_init();
+
+#ifdef CONFIG_SMP
+	/* Initialize IPI. */
+	ipi_init();
+	ipi_pe_init();
+#endif
 
 	/* Merge all memory zones to 1 big zone. */
 #ifndef MACHINE_quartz64a

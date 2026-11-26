@@ -32,6 +32,9 @@
 #include <arch/mm/km.h>
 #include <arch/mm/page.h>
 #include <arch/regutils.h>
+#ifdef CONFIG_SMP
+#include <arch/smp/ap.h>
+#endif
 
 .section K_TEXT_START, "ax"
 
@@ -92,6 +95,14 @@
  *
  */
 SYMBOL(kernel_image_start)
+	/**
+	* x20 physmem_base.
+	* x28 CPU role flag (0 for BSP, 1 for AP).
+	*/
+
+	/* Mark the core as the BSP. */
+	mov x28, #0x0
+
 	/* Get address of the main memory and remember it. */
 	adrp x20, kernel_image_start - BOOT_OFFSET
 	adrp x2, physmem_base
@@ -129,6 +140,7 @@ SYMBOL(kernel_image_start)
 	    1 << PTE_ACCESS_SHIFT | \
 	    MAIR_EL1_NORMAL_MEMORY_INDEX << PTE_ATTR_INDEX_SHIFT | \
 	    PTE_L012_TYPE_BLOCK << PTE_TYPE_SHIFT | \
+		PTE_BLOCK_INNER_SHAREABLE << PTE_BLOCK_SHAREABILITY_SHIFT | \
 	    1 << PTE_PRESENT_SHIFT)
 	lsr x4, x20, #FRAME_WIDTH
 	orr x3, x3, x4, lsl #PTE_OUTPUT_ADDRESS_SHIFT
@@ -173,6 +185,7 @@ SYMBOL(kernel_image_start)
 	    1 << PTE_ACCESS_SHIFT | \
 	    MAIR_EL1_NORMAL_MEMORY_INDEX << PTE_ATTR_INDEX_SHIFT | \
 	    PTE_L012_TYPE_BLOCK << PTE_TYPE_SHIFT | \
+		PTE_BLOCK_INNER_SHAREABLE << PTE_BLOCK_SHAREABILITY_SHIFT | \
 	    1 << PTE_PRESENT_SHIFT) /* Level 2 block entries memory attributes */
 
 	add_L2_table x22 x23 x24 x25 x26 x27 /* temp */ x9 x10 x11 x12 x13 x14 x15
@@ -248,6 +261,11 @@ SYMBOL(kernel_image_start)
 	adrp x24, upper_page_table_level2_fourth1G
 	mov x25, #4096
 	dcache_flush x24 x25 x26 x27
+
+#ifdef CONFIG_SMP
+	/* AP cores continue here to use the built temporary page tables. */
+ap_continue:
+#endif /* CONFIG_SMP */
 
 	/* Make sure there are not any stale TLB entries. */
 	tlbi vmalle1is
@@ -387,6 +405,11 @@ SYMBOL(kernel_image_start)
 	stp x29, x30, [sp, #-16]!
 	mov x29, sp
 
+#ifdef CONFIG_SMP
+	cmp x28, #1
+	b.eq ap_end
+#endif /* CONFIG_SMP */
+
 	/* PA2KA(bootinfo). */
 	sub x1, x1, x20
 	ldr x2, =KM_ARM64_IDENTITY_START
@@ -395,6 +418,93 @@ SYMBOL(kernel_image_start)
 	bl arm64_pre_main
 	bl main_bsp
 	/* Not reached */
+
+#ifdef CONFIG_SMP
+ap_end:
+	bl main_ap
+	/* Not reached */
+
+/** AP entry
+ *
+ * @param x0  Context ID given by the BSP. (unused)
+ */
+SYMBOL(ap_boot)
+	/**
+	* x28 CPU role flag (0 for BSP, 1 for AP).
+	*/
+	mov x28, #0x1
+
+	/* This code was brought here from the HelenOS bootloader. */
+	/* Bring core to EL1 non-secure mode. */
+drop_to_el1:
+	mrs x9, CurrentEL
+	lsr x9, x9, 2
+
+	cmp x9, #3
+	b.eq __el3
+
+	cmp x9, #2
+	b.eq __el2
+
+	cmp x9, #1
+	b.eq __el1
+
+halt:
+	b halt
+
+__el3:
+	msr sctlr_el2, xzr
+	msr hcr_el2, xzr
+	isb
+
+	/* EL2 is AArch64, EL1 is Non-secure World */
+	mov x9, #(1 << 10)
+	orr x9, x9, #(1 << 0)
+	msr scr_el3, x9
+	isb
+
+	/* EL2h */
+	mov x9, #0x9
+	msr spsr_el3, x9
+	isb
+
+	adr x9, __el2
+	msr elr_el3, x9
+	isb
+
+	/* Switch to EL2 */
+	eret
+
+__el2:
+	msr sctlr_el1, xzr
+	isb
+
+	/* EL1 is AArch64 */
+	mov x9, #(1 << 31)
+	msr hcr_el2, x9
+	isb
+
+	/* EL1h */
+	mov x9, #0x5
+	msr spsr_el2, x9
+	isb
+
+	adr x9, __el1
+	msr elr_el2, x9
+	isb
+
+	/* Switch to EL1 */
+	eret
+
+__el1:
+	/* Do not trap on FPU instructions */
+	mrs x9, cpacr_el1
+	orr x9, x9, #(3 << 20)
+	msr cpacr_el1, x9
+	dmb ish
+
+	b ap_continue
+#endif
 
 .section K_DATA_START, "aw"
 

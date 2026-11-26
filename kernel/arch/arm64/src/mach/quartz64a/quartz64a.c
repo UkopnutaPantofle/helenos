@@ -48,7 +48,11 @@
 #define QUARTZ64A_UART_IRQ           150         	/* Interrupt for UART2 */
 #define QUARTZ64A_UART_ADDRESS       0xFE660000  	/* UART2 start address */
 
+#ifndef CONFIG_SMP
 #define PLATFORM_CORE_COUNT 1
+#else
+#define PLATFORM_CORE_COUNT 4
+#endif
 
 #define GIC600_BASE			(0xfd400000)
 #define PLAT_GICD_BASE		(GIC600_BASE)
@@ -64,9 +68,16 @@ struct {
 
 uintptr_t gicr_base_addrs[PLATFORM_CORE_COUNT];
 
-affinity_t quartz64a_pe_affinities[] = {
+affinity_t quartz64a_pe_affinities[PLATFORM_CORE_COUNT] = {
+#ifndef CONFIG_SMP
 	/* Value to be changed at runtime to the actual affinity. */
 	{ .aff3 = 0, .aff2 = 0, .aff1 = 0, .aff0 = 0 },
+#else
+	{ .aff3 = 0, .aff2 = 0, .aff1 = 0, .aff0 = 0 },
+	{ .aff3 = 0, .aff2 = 0, .aff1 = 1, .aff0 = 0 },
+	{ .aff3 = 0, .aff2 = 0, .aff1 = 2, .aff0 = 0 },
+	{ .aff3 = 0, .aff2 = 0, .aff1 = 3, .aff0 = 0 }
+#endif
 };
 
 /**
@@ -91,7 +102,9 @@ static errno_t aff_to_idx(uint32_t affinity, uint32_t *pe_idx_out)
 /** Initialize the Quartz64A platform. */
 static void quartz64a_init(void)
 {
+#ifndef CONFIG_SMP
 	quartz64a_pe_affinities[0] = pe_affinity();
+#endif
 
 	/* Initialize interrupt controller. */
 	unsigned int flags = PAGE_NOT_CACHEABLE | PAGE_READ | PAGE_WRITE |
@@ -207,6 +220,61 @@ static void quartz64a_early_uart_output(char32_t c)
 	*uart_THR = c;
 }
 
+#ifdef CONFIG_SMP
+/** Get the affinities for all PEs on the Quartz64A platform. */
+static affinity_t *quartz64a_get_pe_affinities(void)
+{
+	return quartz64a_pe_affinities;
+}
+
+/** Get the number of PEs on the Quartz64A platform. */
+static unsigned int quartz64a_get_pe_count(void)
+{
+	return PLATFORM_CORE_COUNT;
+}
+
+/** Initialize an AP on the Quartz64A platform. */
+static void quartz64a_ap_init(void)
+{
+	gicv3_pe_init(&quartz64a.gicv3);
+}
+
+/** Enable the virtual timer interrupt for an AP on the Quartz64A platform. */
+static inr_t quartz64a_ap_enable_vtimer_irq(void)
+{
+	return quartz64a_enable_vtimer_irq();
+}
+
+/** Convert an IPI ID to an SGI ID. */
+static uint32_t ipi_to_sgi(int ipi_id)
+{
+	assert(ipi_id >= LOWEST_SGI_ID && ipi_id <= HIGHEST_SGI_ID);
+
+	/* Identity mapping. */
+	uint32_t sgi_id = (uint32_t)ipi_id;
+
+	return sgi_id;
+}
+
+/** Enable the IPI interrupt for a PE on the Quartz64A platform. */
+static void quartz64a_pe_enable_ipi_irq(int ipi_id)
+{
+	uint32_t sgi_id = ipi_to_sgi(ipi_id);
+
+	gicv3_enable(&quartz64a.gicv3, sgi_id);
+}
+
+/** Send an IPI to all PEs on the Quartz64A platform. */
+static void quartz64a_send_ipi_all(int ipi_id)
+{
+	uint32_t sgi_id = ipi_to_sgi(ipi_id);
+
+	gicv3_send_sgi_all(sgi_id);
+}
+
+struct arm_smp_machine_ops quartz64a_smp_machine_ops;
+#endif /* CONFIG_SMP */
+
 struct arm_machine_ops quartz64a_machine_ops = {
 	quartz64a_init,
 	quartz64a_irq_exception,
@@ -216,7 +284,21 @@ struct arm_machine_ops quartz64a_machine_ops = {
 	quartz64a_get_irq_count,
 	quartz64a_get_platform_name,
 	quartz64a_early_uart_output,
+#ifdef CONFIG_SMP
+	&quartz64a_smp_machine_ops
+#endif /* CONFIG_SMP */
 };
+
+#ifdef CONFIG_SMP
+struct arm_smp_machine_ops quartz64a_smp_machine_ops = {
+	quartz64a_get_pe_affinities,
+	quartz64a_get_pe_count,
+	quartz64a_ap_init,
+	quartz64a_ap_enable_vtimer_irq,
+	quartz64a_pe_enable_ipi_irq,
+	quartz64a_send_ipi_all
+};
+#endif /* CONFIG_SMP */
 
 /** @}
  */
